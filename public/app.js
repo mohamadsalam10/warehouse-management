@@ -169,8 +169,18 @@ async function loadEmployees() {
   const body = $('#emp-body'); body.innerHTML = `<div class="panel"><div class="empty">Building metrics for ${month}…</div></div>`;
   try {
     const d = await api(`/api/metrics?${b()}&month=${month}`);
-    if (!d.employees.length) { body.innerHTML = `<div class="panel"><div class="empty"><h3>No data for ${esc(month)}</h3><p>Pick another month.</p></div></div>`; return; }
-    let html = `<div class="panel"><div class="head"><h2>Per-employee metrics</h2><span class="sub">${month} · ${d.employees.length} employees</span></div>
+    const w = d.warehouse || {};
+    let html = `<div class="eyebrow" style="margin-bottom:10px">Warehouse this month</div>
+      <div class="wh-grid">
+        <div class="stat"><div class="k">Days opened</div><div class="n mid">${w.daysOpened || 0}</div></div>
+        <div class="stat"><div class="k">Avg opening</div><div class="n mid mono">${w.avgOpen || '—'}</div></div>
+        <div class="stat"><div class="k">Avg closing</div><div class="n mid mono">${w.avgClose || '—'}</div></div>
+        <div class="stat"><div class="k">Avg hours/day</div><div class="n mid">${w.avgHoursPerDay || 0}h</div></div>
+        <div class="stat"><div class="k">Total hours</div><div class="n mid">${w.totalHours || 0}h</div></div>
+      </div>`;
+
+    if (!d.employees.length) { body.innerHTML = html + `<div class="panel"><div class="empty"><h3>No employee data for ${esc(month)}</h3><p>Pick another month.</p></div></div>`; return; }
+    html += `<div class="panel"><div class="head"><h2>Per-employee metrics</h2><span class="sub">${month} · ${d.employees.length} employees</span></div>
       <table><thead><tr><th>Employee</th><th>Days present</th><th>Avg in</th><th>Avg out</th><th>Avg hrs/day</th><th>Times late</th><th>Left early</th></tr></thead><tbody>`;
     for (const e of d.employees) {
       html += `<tr><td class="emp"><div class="name">${esc(e.name)}</div><div class="id mono">${esc(e.id)}</div></td>
@@ -198,12 +208,13 @@ async function renderCameras() {
       <p>The device didn't return any camera channels. If your CCTV is on a separate recorder, point this branch's camera source at it, and the cameras will list here automatically.</p></div></div>`;
     return;
   }
-  root.innerHTML = `<div class="row-controls"><span class="note-inline">${cams.length} camera${cams.length > 1 ? 's' : ''} · refreshing live</span></div>
-    <div class="cam-grid">${cams.map((c) => `<div class="cam"><div class="frame" data-ch="${esc(c.channel)}"><span>Loading…</span></div>
+  root.innerHTML = `<div class="row-controls"><span class="note-inline">${cams.length} camera${cams.length > 1 ? 's' : ''} · live snapshots · click a camera to zoom and expand</span></div>
+    <div class="cam-grid">${cams.map((c) => `<div class="cam" data-ch="${esc(c.channel)}" data-label="${esc(c.label)}"><div class="frame" data-ch="${esc(c.channel)}"><span>Loading…</span></div>
     <div class="bar"><b>${esc(c.label)}</b><span class="live"><span class="dot"></span>Live</span></div></div>`).join('')}</div>`;
+  root.querySelectorAll('.cam').forEach((cam) => cam.addEventListener('click', () => openViewer(cam.dataset.ch, cam.dataset.label)));
   refreshCams();
   clearInterval(state.camTimer);
-  state.camTimer = setInterval(() => { if (state.view === 'cameras') refreshCams(); }, 3000);
+  state.camTimer = setInterval(() => { if (state.view === 'cameras' && !viewer.open) refreshCams(); }, 3000);
 }
 function refreshCams() {
   document.querySelectorAll('#view-cameras .frame').forEach((f) => {
@@ -212,6 +223,112 @@ function refreshCams() {
     img.onerror = () => { if (!f.querySelector('img')) f.innerHTML = `<span>No image · check channel ${esc(f.dataset.ch)}</span>`; };
     img.src = `/api/snapshot?${b()}&channel=${encodeURIComponent(f.dataset.ch)}&t=${Date.now()}`;
   });
+}
+
+// ---------- CAMERA VIEWER (zoom / pan / fullscreen / pause / save) ----------
+const viewer = { open: false, el: null, img: null, stage: null, ch: null, label: null, scale: 1, tx: 0, ty: 0, timer: null, paused: false, drag: null };
+function buildViewer() {
+  if (viewer.el) return;
+  const el = document.createElement('div');
+  el.className = 'cam-viewer';
+  el.innerHTML = `
+    <div class="cv-top"><b id="cv-label"></b><span class="live" style="color:rgb(255 255 255 / 70%);font-size:.75rem;display:inline-flex;align-items:center;gap:6px"><span class="dot" style="width:7px;height:7px;border-radius:50%;background:var(--color-success)"></span><span id="cv-livetxt">Live</span></span>
+      <button class="cv-btn cv-close" id="cv-close" title="Close"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button></div>
+    <div class="cv-stage" id="cv-stage"><img class="cv-img" id="cv-img" alt=""></div>
+    <div class="cv-bar">
+      <button class="cv-btn" id="cv-out" title="Zoom out"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M8 11h6M21 21l-4.3-4.3"/></svg></button>
+      <span class="cv-zoom" id="cv-zoom">100%</span>
+      <button class="cv-btn" id="cv-in" title="Zoom in"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4.3-4.3"/></svg></button>
+      <button class="cv-btn wide" id="cv-reset">Reset</button>
+      <button class="cv-btn wide" id="cv-pause" title="Pause live"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg> Pause</button>
+      <button class="cv-btn wide" id="cv-full" title="Fullscreen"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M16 21h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg> Fullscreen</button>
+      <button class="cv-btn wide" id="cv-save" title="Save this frame"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> Save frame</button>
+    </div>`;
+  document.body.appendChild(el);
+  viewer.el = el; viewer.img = el.querySelector('#cv-img'); viewer.stage = el.querySelector('#cv-stage');
+
+  el.querySelector('#cv-close').addEventListener('click', closeViewer);
+  el.querySelector('#cv-in').addEventListener('click', () => zoomBy(1.3));
+  el.querySelector('#cv-out').addEventListener('click', () => zoomBy(1 / 1.3));
+  el.querySelector('#cv-reset').addEventListener('click', () => { viewer.scale = 1; viewer.tx = 0; viewer.ty = 0; applyCV(); });
+  el.querySelector('#cv-pause').addEventListener('click', togglePause);
+  el.querySelector('#cv-full').addEventListener('click', () => { if (!document.fullscreenElement) viewer.el.requestFullscreen?.(); else document.exitFullscreen?.(); });
+  el.querySelector('#cv-save').addEventListener('click', saveFrame);
+
+  // wheel zoom (anchored to cursor)
+  viewer.stage.addEventListener('wheel', (e) => { e.preventDefault(); zoomBy(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX, e.clientY); }, { passive: false });
+  // drag pan
+  viewer.stage.addEventListener('pointerdown', (e) => { if (viewer.scale <= 1) return; viewer.drag = { x: e.clientX, y: e.clientY, tx: viewer.tx, ty: viewer.ty }; viewer.stage.classList.add('grabbing'); viewer.stage.setPointerCapture(e.pointerId); });
+  viewer.stage.addEventListener('pointermove', (e) => { if (!viewer.drag) return; viewer.tx = viewer.drag.tx + (e.clientX - viewer.drag.x); viewer.ty = viewer.drag.ty + (e.clientY - viewer.drag.y); applyCV(); });
+  const endDrag = () => { viewer.drag = null; viewer.stage.classList.remove('grabbing'); };
+  viewer.stage.addEventListener('pointerup', endDrag);
+  viewer.stage.addEventListener('pointercancel', endDrag);
+  // pinch zoom (two-pointer)
+  const pts = new Map(); let pinchDist = 0;
+  viewer.stage.addEventListener('pointerdown', (e) => pts.set(e.pointerId, e));
+  viewer.stage.addEventListener('pointermove', (e) => {
+    if (!pts.has(e.pointerId)) return; pts.set(e.pointerId, e);
+    if (pts.size === 2) { const [a, c] = [...pts.values()]; const d = Math.hypot(a.clientX - c.clientX, a.clientY - c.clientY); if (pinchDist) zoomBy(d / pinchDist, (a.clientX + c.clientX) / 2, (a.clientY + c.clientY) / 2); pinchDist = d; }
+  });
+  const clr = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinchDist = 0; };
+  viewer.stage.addEventListener('pointerup', clr); viewer.stage.addEventListener('pointercancel', clr);
+  document.addEventListener('keydown', (e) => { if (viewer.open && e.key === 'Escape' && !document.fullscreenElement) closeViewer(); });
+}
+function applyCV() {
+  viewer.img.style.transform = `translate(${viewer.tx}px, ${viewer.ty}px) scale(${viewer.scale})`;
+  viewer.el.querySelector('#cv-zoom').textContent = Math.round(viewer.scale * 100) + '%';
+  if (viewer.scale <= 1) { viewer.tx = 0; viewer.ty = 0; viewer.img.style.transform = 'translate(0,0) scale(1)'; }
+}
+function zoomBy(factor, cx, cy) {
+  const s0 = viewer.scale;
+  const s1 = Math.min(8, Math.max(1, s0 * factor));
+  if (s1 === s0) return;
+  if (cx != null) {
+    const r = viewer.stage.getBoundingClientRect();
+    const ox = cx - r.left - r.width / 2, oy = cy - r.top - r.height / 2;
+    viewer.tx = ox - ((ox - viewer.tx) / s0) * s1;
+    viewer.ty = oy - ((oy - viewer.ty) / s0) * s1;
+  }
+  viewer.scale = s1; applyCV();
+}
+function cvSnapshotUrl() { return `/api/snapshot?${b()}&channel=${encodeURIComponent(viewer.ch)}&t=${Date.now()}`; }
+function cvRefresh() {
+  if (viewer.paused) return;
+  const img = new Image();
+  img.onload = () => { if (viewer.open && !viewer.paused) viewer.img.src = img.src; };
+  img.src = cvSnapshotUrl();
+}
+function togglePause() {
+  viewer.paused = !viewer.paused;
+  viewer.el.querySelector('#cv-pause').innerHTML = viewer.paused
+    ? `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 3l14 9-14 9z"/></svg> Resume`
+    : `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg> Pause`;
+  viewer.el.querySelector('#cv-livetxt').textContent = viewer.paused ? 'Paused' : 'Live';
+}
+async function saveFrame() {
+  try {
+    const r = await fetch(cvSnapshotUrl()); const blob = await r.blob();
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `${viewer.label || 'camera'}-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.jpg`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch { /* ignore */ }
+}
+function openViewer(ch, label) {
+  buildViewer();
+  viewer.ch = ch; viewer.label = label; viewer.open = true; viewer.paused = false;
+  viewer.scale = 1; viewer.tx = 0; viewer.ty = 0; applyCV();
+  viewer.el.querySelector('#cv-label').textContent = label;
+  viewer.el.querySelector('#cv-livetxt').textContent = 'Live';
+  viewer.img.src = cvSnapshotUrl();
+  viewer.el.classList.add('open');
+  clearInterval(viewer.timer);
+  viewer.timer = setInterval(cvRefresh, 1500);
+}
+function closeViewer() {
+  viewer.open = false;
+  clearInterval(viewer.timer);
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  viewer.el.classList.remove('open');
 }
 
 // ---------- SETTINGS ----------

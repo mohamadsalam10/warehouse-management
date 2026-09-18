@@ -158,9 +158,9 @@ const server = http.createServer(async (req, res) => {
         const events = await device.getEventsForDay(branch, date);
         const people = att.summariseDay(events, { viewingToday: date === today });
         att.evaluateDay(branch.id, people, branch.tzOffset);
-        days.push({ date, people });
+        days.push({ date, isToday: date === today, people });
       }
-      return sendJSON(res, 200, { month, branch: branch.id, employees: att.monthlyMetrics(branch.id, days, branch.tzOffset) });
+      return sendJSON(res, 200, { month, branch: branch.id, warehouse: att.warehouseMonthly(days, branch.tzOffset), employees: att.monthlyMetrics(branch.id, days, branch.tzOffset) });
     }
 
     // Camera list: manual override if provided, else auto-discover from the device

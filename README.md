@@ -95,8 +95,12 @@ under **Settings → Branches and cities** without touching the deploy config.
 
 ## Two things to know
 
-1. **Cameras show fast snapshots, not a video stream.** The device serves still images over the API,
-   refreshed every few seconds. True continuous video needs a separate streaming gateway — a later add-on.
+1. **Cameras show live snapshots you can zoom, not recorded video (yet).** Click any camera to open a
+   full-screen viewer with zoom (buttons, mouse wheel, or pinch), drag-to-pan, pause, fullscreen, and
+   save-frame. The picture refreshes every couple of seconds. Two things this does **not** do yet, both
+   of which need a separate video-streaming component we can add later: continuous live video, and
+   **playback of recorded footage** (scrubbing back to an earlier time). Those aren't possible straight
+   from the device in a browser; they're a follow-on project.
 2. **Saved settings reset on Render's free plan.** The free plan wipes the disk on each redeploy, so
    working hours and notification choices don't persist across deploys. For durable storage we can point
    this at your **Supabase** database (a small change) so nothing is lost. Ask when you want that.

@@ -94,6 +94,8 @@ label.field .hint { font-weight: 400; color: var(--color-muted); font-size: var(
 .stat.hero { background: var(--brand-orange); border-color: var(--brand-orange); color: #fff; }
 .stat.hero .k { color: rgb(255 255 255 / 82%); }
 .stat.hero .n { color: #fff; }
+.stat .n.mid { font-size: var(--text-2xl); }
+.wh-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-4); margin-bottom: var(--space-8); }
 
 /* ---- panels / tables ---- */
 .panel { background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-soft); overflow: hidden; margin-bottom: var(--space-6); }
@@ -133,6 +135,22 @@ td.num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 .cam { border: 1px solid var(--color-border); border-radius: var(--radius-soft); overflow: hidden; background: var(--color-bg); }
 .cam .frame { aspect-ratio: 16/9; background: var(--brand-ink); display: flex; align-items: center; justify-content: center; color: rgb(255 255 255 / 60%); font-size: var(--text-sm); }
 .cam .frame img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.cam .frame { cursor: zoom-in; }
+
+/* ---- camera viewer overlay ---- */
+.cam-viewer { position: fixed; inset: 0; background: #0a0a0a; z-index: 60; display: none; flex-direction: column; }
+.cam-viewer.open { display: flex; }
+.cv-top { display: flex; align-items: center; gap: 12px; padding: 14px 18px; color: #fff; }
+.cv-top b { font-size: var(--text-base); font-weight: 600; }
+.cv-top .cv-close { margin-left: auto; }
+.cv-stage { flex: 1; overflow: hidden; position: relative; display: flex; align-items: center; justify-content: center; touch-action: none; cursor: grab; }
+.cv-stage.grabbing { cursor: grabbing; }
+.cv-img { max-width: 100%; max-height: 100%; transform-origin: center center; user-select: none; -webkit-user-drag: none; will-change: transform; }
+.cv-bar { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 14px 18px; flex-wrap: wrap; }
+.cv-btn { min-width: 40px; height: 40px; border-radius: var(--radius-soft); background: rgb(255 255 255 / 12%); border: 1px solid rgb(255 255 255 / 18%); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; font: inherit; font-size: var(--text-sm); font-weight: 600; transition: background var(--dur-fast) var(--easing); }
+.cv-btn:hover { background: rgb(255 255 255 / 22%); }
+.cv-btn.wide { padding: 0 14px; }
+.cv-zoom { font-family: var(--font-mono); color: #fff; font-size: var(--text-sm); min-width: 52px; text-align: center; }
 .cam .bar { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-top: 1px solid var(--color-border); }
 .cam .bar b { font-size: var(--text-sm); font-weight: 600; }
 .cam .bar .live { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-xs); color: var(--color-muted); }
