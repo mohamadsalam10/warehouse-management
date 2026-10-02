@@ -1,41 +1,33 @@
+# Render blueprint. In Render: New + > Blueprint, point it at this repo.
+# Creates one Postgres database and one Node web service wired together.
+databases:
+  - name: storage-ae-emp-db
+    plan: free
+    databaseName: storage_ae
+    user: storage_ae
+
 services:
   - type: web
-    name: storage-ae-ops
+    name: storage-ae-employee-management
     runtime: node
     plan: free
-    buildCommand: npm install
-    startCommand: node server.js
+    # Install every workspace, then build the client bundle.
+    buildCommand: npm install && npm run build
+    # index.js ensures the schema and seeds on first boot, then serves API + client.
+    startCommand: npm start
+    healthCheckPath: /api/health
     envVars:
-      # --- single branch (simplest) ---
-      - key: DEVICE_HOST
-        sync: false
-      - key: DEVICE_PORT
-        value: 50443
-      - key: DEVICE_USER
-        value: admin
-      - key: DEVICE_PASS
-        sync: false
-      - key: BRANCH_NAME
-        value: Al Quoz
-      # --- login ---
-      - key: DASHBOARD_PASSWORD
-        sync: false
-      - key: SESSION_SECRET
+      - key: DATABASE_URL
+        fromDatabase:
+          name: storage-ae-emp-db
+          property: connectionString
+      - key: JWT_SECRET
         generateValue: true
-      # --- display / behaviour ---
-      - key: TZ_OFFSET
-        value: "+04:00"
-      - key: ENABLE_DOORS
+      - key: BOT_SECRET
+        generateValue: true
+      - key: SEED_ON_BOOT
+        value: "true"
+      - key: SEED_DEMO
         value: "false"
-      # Cameras are auto-discovered from the device — nothing to set here.
-      # Only if your CCTV is on a SEPARATE recorder, point cameras at it:
-      # - key: CAMERA_HOST
-      #   sync: false
-      # - key: CAMERA_PASS
-      #   sync: false
-      # (Optional) force a manual camera list instead of auto-discovery:
-      # - key: CAMERAS
-      #   sync: false
-      # For MULTIPLE branches, set BRANCHES instead of the DEVICE_* vars above (see README)
-      # - key: BRANCHES
-      #   sync: false
+      - key: NODE_ENV
+        value: production

@@ -1,8 +1,25 @@
 {
-  "name": "storage-ae-warehouse-ops",
+  "name": "storage-ae-employee-management",
   "version": "1.0.0",
-  "description": "storage.ae warehouse operations dashboard — attendance, cameras, metrics, alerts",
-  "main": "server.js",
-  "scripts": { "start": "node server.js" },
-  "engines": { "node": ">=18" }
+  "private": true,
+  "description": "storage.ae People Operations: recruitment to onboarding to training, with role-based access.",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm --prefix server run dev",
+    "dev:web": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "node server/src/index.js",
+    "migrate": "node server/src/migrate.js",
+    "seed": "node server/src/seed.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
 }
